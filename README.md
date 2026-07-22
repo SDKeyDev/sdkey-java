@@ -12,14 +12,14 @@ Maven:
 <dependency>
   <groupId>dev.sdkey</groupId>
   <artifactId>sdk</artifactId>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("dev.sdkey:sdk:0.2.0")
+implementation("dev.sdkey:sdk:0.3.0")
 ```
 
 Requires Java 17+.
@@ -39,8 +39,8 @@ SdkeyClient client = new SdkeyClient(SdkeyClientOptions.builder()
     .build());
 
 try {
-    // HWID is optional — omit for web clients (JSON key is not sent).
-    ValidateResult result = client.validate("SDKY-XXXX-XXXX-XXXX-XXXX", "machine-hwid");
+    // Desktop: pass HardwareId.getHardwareId(). Web: omit hwid (JSON key is not sent).
+    ValidateResult result = client.validate("SDKY-XXXX-XXXX-XXXX-XXXX", HardwareId.getHardwareId());
     if (result.isSuccess()) {
         System.out.printf(
             "licensed %s tier=%s %s%n",
@@ -87,6 +87,26 @@ System.out.println(auth.getSessionToken());
 ```
 
 Auth failures throw `SdkeyError` with `getCode() = AUTH_FAILED`, `getMessage()` = server `error`, and `getServerCode()` = server `code`.
+
+### Hardware ID (`HardwareId.getHardwareId()`)
+
+Collects a stable OS machine identifier, trims it, and returns its **SHA-256** digest as lowercase hex (64 chars). Opt-in only — the SDK never auto-injects HWID.
+
+| Platform | Source |
+|---|---|
+| Windows | `HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid` |
+| Linux | `/etc/machine-id`, else `/var/lib/dbus/machine-id` |
+| macOS | `IOPlatformUUID` via `ioreg` |
+
+```java
+// Desktop clients
+client.validate(licenseKey, HardwareId.getHardwareId());
+
+// Web / omit binding — leave hwid null / unused
+client.validate(licenseKey);
+```
+
+Unsupported platforms or a missing/empty machine ID throw `SdkeyError` with `getCode() = HWID_UNAVAILABLE`. Do not invent a random fallback ID.
 
 ## Where `message` vs `error` appears
 
@@ -157,12 +177,13 @@ Per-app `responseMessages` can customize many strings. The SDK surfaces whatever
 - `validate(licenseKey, hwid?)` — sealed validate; **always** decrypts then verifies the Ed25519 signature before trusting `success`
 - `register(params)` / `login(params)` / `upgrade(params)` — plaintext `/api/v1/client/*`
 - `getSession()` / `clearSession()` — inspect or drop the local crypto session
+- `HardwareId.getHardwareId()` — SHA-256 hex of a stable OS machine ID (desktop; opt-in)
 
 ### Errors
 
 Protocol / transport failures throw `SdkeyError` with a `getCode()`:
 
-`INIT_FAILED` · `HELLO_SIGNATURE_INVALID` · `VALIDATE_RESPONSE_INVALID` · `RESPONSE_SIGNATURE_INVALID` · `SESSION_MISMATCH` · `CLOCK_SKEW` · `AUTH_FAILED` · `NETWORK`
+`INIT_FAILED` · `HELLO_SIGNATURE_INVALID` · `VALIDATE_RESPONSE_INVALID` · `RESPONSE_SIGNATURE_INVALID` · `SESSION_MISMATCH` · `CLOCK_SKEW` · `AUTH_FAILED` · `NETWORK` · `HWID_UNAVAILABLE`
 
 License denials on sealed validate (banned, HWID mismatch, etc.) return a normal `ValidateResult` with `isSuccess() = false` — they are not thrown.
 

@@ -12,6 +12,7 @@ public enum SdkeyErrorCode {
   CLOCK_SKEW,
   AUTH_FAILED,
   NETWORK,
+  HWID_UNAVAILABLE,
   UNKNOWN;
 
   public String toWireString() {
